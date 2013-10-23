@@ -1,0 +1,181 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<title>WiFi Share</title>
+		<script src="/android_asset/compact.js"></script>
+		<link rel="stylesheet" href="/android_asset/theme/default/style.css" type="text/css">
+		<style>
+			@import url(http://fonts.googleapis.com/css?family=Oswald:400,700,300);
+			body{
+				margin:0 0 0 0;
+				overflow: hidden;
+				font-family: 'Oswald', sans-serif;
+			}
+			header{
+				width:100%;
+				text-shadow: 0 1px 4px rgba(0,0,0,.6);
+				padding-left:35px;
+				background-image:url(/android_asset/megepack.png);
+				padding-top:40px;
+				height:150px;
+				border-bottom:2px solid #ddd;
+			}
+			.title{
+				font-weight:700; 
+				font-size:3em;
+				display:block;
+			}
+			.mission{
+				font-weight: 300; 
+				font-size:1.5em;
+			}
+			footer{
+				font-size:0.6em;
+				text-align: center;
+				width:100%;
+				border-top:2px solid #ddd;
+			}
+			#map{
+				width:100%;
+			}
+			.app{
+				position:absolute;
+				top:64px;
+				right:64px;
+				height:64px;
+			}
+			
+			.sbox{
+				position:absolute;
+				top:40px;
+				left:300px;
+			}
+			#search{
+				
+				font-family: 'Oswald', sans-serif;
+				border:none;
+				background-image: url(/android_asset/megepack.png);
+				background-position-x:-302px;
+				font-weight:300; 
+				font-size:3em;
+			}
+			#search:hover{
+				border: 1px solid white;
+				background-position-x:-303px;
+				font-weight:300; 
+				font-size:3em;
+			}
+		</style>
+		<script>
+		
+			WFS = {};
+			WFS.proj = {};
+			WFS.proj.wgs = new OpenLayers.Projection('EPSG:4326');
+			WFS.proj.google = new OpenLayers.Projection('EPSG:900913');
+			function localize(position) {
+
+				//mapServiceProvider(position.coords.latitude, position.coords.longitude);
+				ll = new OpenLayers.LonLat(position.coords.longitude, position.coords.latitude).transform(WFS.proj.wgs,WFS.proj.google);
+				WFS.map.panTo(ll);
+				
+
+			}
+
+			function load_data(){
+				WFS.vector_layer.removeAllFeatures();
+				bb = WFS.map.getExtent().toGeometry().transform(WFS.proj.google,WFS.proj.wgs).getBounds().toBBOX();
+				$.getJSON('/points?BB='+bb, function(data){
+					var geojson_format = new OpenLayers.Format.GeoJSON({externalProjection:WFS.proj.wgs, internalProjection:WFS.proj.google});
+					WFS.vector_layer.addFeatures(geojson_format.read(data));
+				});
+			}
+			function error(error) {
+				switch(error.code) {
+					case error.TIMEOUT:
+						alert('Timeout');
+						break;
+					case error.POSITION_UNAVAILABLE:
+						alert('Position unavailable');
+						break;
+					case error.PERMISSION_DENIED:
+						alert('Permission denied');
+						break;
+					case error.UNKNOWN_ERROR:
+						alert('Unknown error');
+						break;
+				}
+			}
+			
+
+			function resize(){
+				$('#map').height($(window).height()-$('header').height()-$('footer').height()-4-43);
+			}
+			function createBB(viewport) {
+				var bb = new OpenLayers.Bounds();
+				bb.extend(new OpenLayers.LonLat(viewport.southwest.lng, viewport.southwest.lat).transform(WFS.proj.wgs, WFS.proj.google));
+				bb.extend(new OpenLayers.LonLat(viewport.northeast.lng, viewport.northeast.lat).transform(WFS.proj.wgs, WFS.proj.google));
+				return bb;
+			}
+			$('#search').live('keypress', function(event){
+				if( event.which == 13 ){
+					$.getJSON('/external/maps.googleapis.com/maps/api/geocode/json?sensor=false&address=' + $('#search').val(), function(data) {
+								WFS.map.zoomToExtent(createBB(data.results[0].geometry.viewport));
+							})
+				}
+			});
+
+
+			$(window).resize(resize);
+			$(function() {
+				WFS.vector_layer = new OpenLayers.Layer.Vector(); 
+				WFS.vector_layer.events.on({
+					'featureselected': function(feature) {
+						$.get('/point?id='+feature.feature.attributes.id,function(data){
+							alert(data);
+						});
+                },
+                'featureunselected': function(feature) {
+                	
+                }
+				});
+				resize();
+				WFS.map = new OpenLayers.Map("map", {
+					
+          			theme: null,
+				});
+				
+				WFS.selector = new OpenLayers.Control.SelectFeature(
+                    WFS.vector_layer,
+                    {
+                        clickout: true, toggle: false,
+                        multiple: false, hover: false,
+                        toggleKey: "ctrlKey", // ctrl key removes from selection
+                        multipleKey: "shiftKey", // shift key adds to selection
+                        box: false
+                    }
+                )
+				
+				WFS.map.addLayer(new OpenLayers.Layer.OSM("OSM"));
+				WFS.map.addControl(WFS.selector);
+				WFS.selector.activate()
+				WFS.map.addLayer(WFS.vector_layer);
+				WFS.map.zoomTo(18);
+				WFS.map.events.register('moveend', WFS.map, load_data);
+				
+				if (navigator.geolocation) {
+					navigator.geolocation.watchPosition(localize,error);
+				}
+			});
+		</script>
+	</head>
+	<body>
+		<header>
+			<span class="title">WiFiShare</span>
+			<span class="mission">Help us map the wireless...</span>
+			<span class="sbox"><input type="text" id="search"></span>
+			<span class="and app"><img src="/android_asset/and_ico.png" height="64" /></span>
+		</header>
+		<div id="map"> </div>
+		<footer>&copy; MMo.IT 2012 - CitizenNerd</footer>
+	</body>
+</html>
